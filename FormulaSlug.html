@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Formula Slug</title>
+</head>
+<body>
+<h1>Formula Slug</h1>
+<img src="images/driverlessExample.png" alt="Driverless Vision Stack" style="float: right; max-width: 400px; margin-left: 1em;">
+<p>I am currently (as of the 2025-2026 school year) the autonomous
+racing lead for Formula Slug, the FSAE Electric Vehicle team of the
+University of California - Santa Cruz. This is the first year driverless has
+been developed at UCSC, meaning the entire effort is being developed
+from scratch. I manage a team of 12 people, and develop the software
+side of the autonomous effort from the perception system all the way
+to the control inputs. <a
+href="https://github.com/formulaslug/Driverless" target="_blank">You can find the code
+here</a></p>
+
+<p>Additionally, I also work on full vehicle dynamics simulations written
+from scratch in Python, which goes from electrical modeling to
+mechanical modeling. <a
+href="https://github.com/formulaslug/Sims-Data" target="_blank">You
+can find the code here</a></p>
+<h2>Technical details</h2>
+<h3>Driverless</h3>
+<p>The driverless event involves autonomously pushing a vehicle to its
+physical limit, which involves having a strong understanding of its
+surroundings and control.</p>
+<p> The driverless challenge involves 3 dynamic events and 1 static
+event. The static event is a design event, involving industry
+professionals judging design choices and tradeoffs. The 3 dynamic
+events involve acceleration across 40 meters, a skipdpad event (figure
+8 driving), and a track drive over an unseen course. During dynamic
+events, the car operates entirely independent of human control and no
+data may be sent to the car. </p>
+<p> This competition has incredible relevance to real world self
+driving vehicles as it involves edge deployment of complex machine
+learning systems, control planning at a vehicle's limits which is
+important in life and death situations, and also strict safety and
+rules requirements which helps familiarize me with regulatory and
+testing procedures. </p>
+<p><b>Hardware:</b> Due to team budgetary constraints, we do not run
+LIDAR for depth estimation, and use a machine learning based
+approach. We run a singular raspberry pi v3 wide angle camera,
+providing us a 120 degree forward view. It is likely going to be
+mounted around the dash, overlooking the front of the car which we can
+use as reference points to turn relative depth estimation into
+absolute depth estimation. The resolution of our camera is not
+paritcularly relevant, as because we are compute limited, we will
+downscale the image dramatically prior to processing. Our onboard GPU
+is an Nvidia Jetson Orin AGX 64GB, chosen for its VRAM and TensorRT
+support. Addtionally, we use a Raspberry Pi for additional compute
+that does not need to happen on the GPU. We target a 10hz refresh rate
+from our cameras and a latency budget less than 200ms. These values
+were taken from talking to other teams during the 2025 competition
+(thanks for all the help MIT, UCB, UToronto, CMU, and others!) but we
+are eager to verify them ourselves. </p>
+<p><b>Perception Models:</b> The perception system is made of 2 components, a
+semantic segmentation model and a depth estimation model.
+Due to a learning based approach for depth estimation, it is critical
+that we prioritize speed over accuracy as possible in our model
+choice. For semantic segmentation models, the YOLACTEdge model was
+chosen because it is light weight, has sufficient accuracy, and can be
+deployed easily with TensorRT. We avoided a YOLO model because while
+YOLO models typically have greater accuracy, while benchmarking YOLO
+models agains YOLACT, we found that YOLACTEdge ran over 2x faster than
+YOLO models (V9 and V11) making it a poor accuracy to compute
+tradeoff. For depth estimation, we chose to use Depth Anything V2 and
+Prior Depth Anything. Depth Anything V2 was chosen because it can be
+deployed on TensorRT and is an excellent SOTA model that can be paired
+with Prior Depth Anything to get metric depth.</p>
+<p><b>Localization:</b> The perception models provide some estimation
+of cone location, however it must be properly interpreted. We have 2
+coordinate systems to use used to keep track of the cones for us to
+drive through. The first set is set around the car and the second set
+of coordinates is global. The coordinate system around the car is used
+during a run for planning, and the global system keeps track of cones
+for future runs, where the track is known from a previous drive. To
+get the coordinates of the cones from a current 'refresh' (image from
+the camera), we use the segmentation from YOLACTEdge to get the pixels
+of each cone instance. We also have a classification for each cone
+type (blue, yellow, small orange, large orange) and because the cones
+are a standardized height and we know the specifications of the
+cameras, we can use the height of the cone in pixels to estimate its
+distance. Additionally, we use the data from DepthAnythingV2 to get
+the average distance of a pixel in the cone. Finally, we use RANSAC
+for ground plane estimation and we can locate where the cone is on the
+ground plane and estimate its distance. We can then run a kalman
+filter to then estimate the location of a cone relative to the car. Of
+course, we have data on where the cone was from further away or
+previous track runs. We can run another kalman filter over these
+locations to estimate the location of an individual cone as we gain
+and assess certainty over time.</p>
+<p><b>Path planning:</b> With a map of the cones, a path must be
+determined through the cones. We utilize Delaunay Triangulation over
+the cones to understand where the path is in the cones and judge a
+path through them. We then generate a spline as a path through the
+cones for the vehicle to follow. As a first year team, we are not
+attempting to take an optimal racing line through the cones and
+instead we are targeting the center line. Additionally, we also are
+going with the assumption that the path generated is within the
+physical capabilities of the vehicle, and we will slow the vehicle if
+it is unable to make the demanded maneuver.</p>
+<p><b>Control Planning:</b> With the spline that defines the path, we use a Stanley
+controller to choose the steering angle that we target the
+vehicle. Additionally, we use a PID controller to determine the
+throttle or regenerative braking of the vehicle to ensure that the
+vehicle is always at our target speed. To ensure that our stanley
+controller's torque demand is within the posibilitity of our steering
+actuator, we estimate the maximum turning rate of the steering
+actuator based on our vehicle dynamics models. We fit the parameters
+for our controllers based on the vehicle dynamics simulations to tune
+its aggressiveness so that we can smoothly follow the path. </p>
+<h3>Vehicle Dynamics Simulations</h3>
+<p>I also develop and help maintain vehicle dynamics simulations. The
+vehicle dynamics simulations are meant to deal with transient inputs
+and simulate the entire vehicle at once.</p>
+<p><b>Tire Modeling:</b> The tire modeling was a bulk of my work and
+involved fitting the Pacejka 6.2 Magic Formula (over 100 parameters) to generate insights
+from our tires. The data was fit on FSAE Tire Test Consortium data,
+and involved fitting the tires so we understand how temperature,
+normal load, pressure, and more effect the traction. Hoosier R20 compound 6
+and 7 inch width and Hoosier LC0 compound 6 inch width tires were fit. The
+radius of our tires is not directly available from the FSAE TTC, so we
+used the AVON tires which had many radiuses on the same compound
+available, and we scaled our data appropriately to the radius of our
+tires</p>
+<p><b>Yawrate Modeling:</b> Yawrate modeling is an incredibly complex
+part of vehicle dynamics modeling, and we utilized Euler's method to
+simplify the fundamental equations of vehicle motion to solve for
+transient behavior for the yaw rate given a step steer input. The
+model considers the velocity of the vehicle, steer angle input, wheel
+base, vehicle length, cornering stiffness, slip angle, body slip, and
+more to estimate the change in yaw rate.</p>
+<p><b>Lap time simulations:</b> The lap time simulation represents a
+comprehensive way to assess the maximum theoretical performance of the
+vehicle. Our laptime simulation involves dividing a track into
+straights and corners, and then assessing the maximum entry and exit
+speed that the vehicle can achieve to optimize our vehicle for maximum
+performance.</p>
+<p><b>Assorted other modeling:</b> I also modeled brake heating which
+involved understanding the friction the brake pads achieve at
+different temperatures and also modeling how they heat and cool
+throughout driving. Additional things I modeled are: body slip, slip
+angle, virtual slip angle, partial suspension modeling, a bit of
+drivetrain modeling, and more. Additionally, while I didn't directly
+model these, some excellent work is/has been done on a Driver in Loop
+(DIL, sim racing video game!), battery modeling, and motor torque modelign. </p>
+</body>
+</html>
